@@ -1,4 +1,4 @@
-# DE_SCHEDULER
+# GITHUB_EVENT_PIPELINE
 
 ### _End-to-End Data Engineering Pipeline with Medallion Architecture & High Availability Ingestion_
 
@@ -6,7 +6,18 @@
 [![Version](https://img.shields.io/badge/version-1.1.0-blue)](https://github.com/dHung2412/DE_Scheduler)
 [![Tech Stack](https://img.shields.io/badge/stack-Airflow%20|%20Spark%20|%20MinIO%20|%20Kafka%20|%20Iceberg%20|%20Prometheus%20|%20Grafana-orange)](https://github.com/dHung2412/DE_Scheduler)
 
-**DE_SCHEDULER** là một Data Pipeline toàn diện (End-to-End) được thiết kế để thu thập, xử lý và phân tích dữ liệu sự kiện thời gian thực. Dự án tích hợp các công nghệ hiện đại nhất trong Data Engineering để giải quyết bài toán về độ tin cậy dữ liệu (Reliability), hiệu suất cao (High Throughput) và tính nhất quán (Medallion Lakehouse).
+**GITHUB_EVENT_PIPELINE** là một hệ thống Data Pipeline toàn diện (End-to-End) được thiết kế để giải quyết các thách thức thực tế trong việc thu thập và xử lý dữ liệu lớn theo thời gian thực. Dự án không chỉ là một luồng ETL đơn thuần mà là một giải pháp hoàn chỉnh kết hợp giữa tính sẵn sàng cao, hiệu suất vượt trội và quản trị dữ liệu chặt chẽ.
+
+---
+
+## 🚀 Mục đích chính của dự án
+
+Dự án nhấn mạnh vào việc giải quyết 4 bài toán cốt lõi trong Data Engineering:
+
+1.  **Duy trì High Availability & Zero Data Loss**: Xây dựng một Ingestion Gateway bền bỉ với các lớp bảo vệ dữ liệu (Spill-to-disk, Multi-tier Fallback). Đảm bảo mọi sự kiện được thu thập thành công ngay cả khi hạ tầng lưu trữ chính gặp sự cố.
+2.  **Tối ưu hóa Ingestion Performance**: Áp dụng kỹ thuật nén Avro Binary và Micro-batching ngay tại Application Level để giảm tải cho băng thông mạng và Kafka Broker, tối ưu hóa chi phí vận hành hạ tầng.
+3.  **Quản trị dữ liệu theo Medallion Lakehouse**: Triển khai Apache Iceberg để biến Data Lake thành Lakehouse với các tính năng ACID Transactions, Schema Evolution và Time Travel. Dữ liệu được tổ chức lớp lang (Bronze, Silver, Gold) để duy trì tính minh bạch và tin cậy.
+4.  **Tự động hóa & Giám sát toàn diện (Observability)**: Đồng bộ hóa quá trình xử lý bằng Airflow và giám sát sức khỏe hệ thống theo thời gian thực bằng Prometheus/Grafana, cho phép phát hiện và phản ứng nhanh với các điểm nghẽn (bottleneck).
 
 ---
 
@@ -40,6 +51,8 @@
 ---
 
 ## 3. Kiến trúc hệ thống (System Architecture)
+
+[Chi tiết được trình bày bên trong các thư mục]
 
 Dự án tuân thủ mô hình xử lý dữ liệu hiện đại, kết hợp giữa Streaming và Batch:
 
@@ -94,66 +107,74 @@ docker-compose up -d
 ### Bước 1: Chuẩn bị dữ liệu (Data Ingestion)
 
 1.  **Khởi chạy Collector Service** (FastAPI):
-    Dịch vụ này nhận dữ liệu từ nguồn ngoài và đẩy vào Kafka.
 
-```bash
-cd src/metric_collector
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
+    ```bash
+    cd src/metric_collector
+    uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ```
 
-### Giả lập dữ liệu (Simulator)
+2.  **Khởi chạy luồng Streaming (Kafka to Bronze)**:
+    Mở một terminal mới và chạy Spark Structured Streaming để nạp dữ liệu từ Kafka vào Iceberg:
 
-Sử dụng script để bắn hàng nghìn records mẫu vào hệ thống.
+    ```bash
+    python -m dags.spark_jobs.kafka_bronze.process_kafka_to_bronze
+    ```
 
-```bash
-# Mở terminal mới tại thư mục gốc
-python -m metric_collector.batch_injector
-```
+3.  **Bắn dữ liệu giả lập (Simulator)**:
+    ```bash
+    # Chạy từ thư mục src
+    python -m metric_collector.batch_injector
+    ```
 
-### Bước 2: Kích hoạt Pipeline điều phối (Airflow)
+### Bước 2: Điều phối Pipeline chính (Airflow DAG)
 
 1.  Truy cập Airflow UI tại `http://localhost:8080`.
-2.  Bật (Unpause) DAG `github_events_pipeline`.
-3.  Kích hoạt (Trigger) DAG để thực hiện luồng: **Bronze -> Silver -> Gold** và thực hiện **dbt test**.
+2.  Kích hoạt DAG **`github_events_pipeline`** để thực hiện chu trình:
+    - **Bronze to Silver (Spark)**: Tăng trưởng dữ liệu và làm phẳng log.
+    - **Silver to Gold (dbt)**: Chạy các models dbt để tổng hợp dữ liệu Business.
+    - **Data Quality (dbt test)**: Kiểm tra tính toàn vẹn và duy nhất của dữ liệu.
 
-### Bước 3: Bảo trì hệ thống
+### Bước 3: Bảo trì hệ thống (Maintenance DAG)
 
-Các DAG `maintenance_bronze_*` và `maintenance_silver_*` được thiết lập để chạy định kỳ nhằm tối ưu hóa file lưu trữ (Compaction) và dọn dẹp Metadata trên MinIO.
+Kích hoạt DAG **`iceberg_table_maintenance`** để tự động hóa các tác vụ:
 
----
-
-## 6. Truy vấn dữ liệu & Phân tích (Analytics)
-
-Bạn có thể sử dụng Jupyter Notebook tích hợp sẵn để kiểm tra kết quả tại mỗi Layer:
-
-- **Địa chỉ**: `http://localhost:8888`
-- **Cách dùng**: Sử dụng Spark SQL để query các bảng trong namespaces `demo.bronze`, `demo.silver`, `demo.gold`.
+- **Daily**: Compaction (gom file nhỏ) cho cả hai tầng Bronze và Silver.
+- **Weekly**: Xóa Snapshots cũ và dọn dẹp Orphan files để tối ưu dung lượng MinIO.
 
 ---
 
-## 5. Cấu trúc dự án (Project Structure)
+## 6. Cấu trúc dự án (Project Structure)
 
 ```text
 DE_Scheduler/
 ├── src/
-│   ├── airflow/          # Dockerfile & Plugins cho Airflow
-│   ├── dags/             # Định nghĩa DAGs và Spark Jobs
-│   ├── dbt_project/      # Logic biến đổi dữ liệu với dbt
-│   ├── metric_collector/ # API Gateway & Kafka Producer logic
-│   ├── monitoring/       # Cấu hình Prometheus & Grafana
-│   ├── utils/            # Schema (Avro) và các tài liệu bổ trợ
-│   └── data/             # Dữ liệu mẫu dùng cho Simulation
-├── docker-compose.yaml   # Hạ tầng Containerized
-└── .env                  # Biến môi trường tập trung
+│   ├── airflow/          # Dockerfile & Plugins cho môi trường Airflow
+│   ├── dags/             # Airflow DAGs & Spark Jobs xử lý chính
+│   │   ├── spark_jobs/   # Scripts PySpark (Kafka-to-Bronze, Bronze-to-Silver)
+│   │   └── af_*.py       # Định nghĩa Workflow điều phối (Orchestration)
+│   ├── dbt_project/      # Dự án dbt xử lý tầng Gold & Data Quality tests
+│   ├── metric_collector/ # API Gateway (FastAPI) & Kafka Producer (Avro)
+│   ├── monitoring/       # Cấu hình Prometheus & Grafana dashboard
+│   ├── utils/            # Shared components (Avro Schema, SQL templates)
+│   └── data/             # Dữ liệu sự kiện mẫu (JSONL) cho simulation
+├── docker-compose.yaml   # Điều phối toàn bộ hạ tầng (Kafka, Spark, MinIO, Airflow,...)
+└── .env                  # Quản lý tập trung các biến môi trường
 ```
 
 ---
 
-## 6. Analytics & Monitoring
+## 7. Analytics & Monitoring
 
-- **Jupyter Notebook**: `http://localhost:8888` để truy vấn SQL trên các lớp Bronze/Silver/Gold.
-- **Prometheus**: `http://localhost:9090` để theo dõi các metrics hệ thống.
-- **MinIO**: `http://localhost:9001` quản lý dữ liệu thô và Iceberg files.
+Cung cấp cái nhìn toàn diện về sức khỏe hệ thống và chất lượng dữ liệu:
+
+- **Jupyter Notebook**: [http://localhost:8888](http://localhost:8888)  
+  => Dùng để thăm dò dữ liệu (EDA) và truy vấn SQL trên các tầng **Bronze / Silver / Gold** thông qua Spark SQL.
+- **Prometheus**: [http://localhost:9090](http://localhost:9090)  
+  => Theo dõi các metrics kỹ thuật: Tốc độ Ingestion, Queue Status, Latency của Kafka Producer.
+- **MinIO Console**: [http://localhost:9001](http://localhost:9001)  
+  => Quản lý Storage Lakehouse, kiểm tra các tệp Iceberg (Parquet) và Metadata.
+- **Airflow UI**: [http://localhost:8080](http://localhost:8080)  
+  => Giám sát trạng thái vận hành của toàn bộ Pipeline và lịch sử thực thi.
 
 ---
 
