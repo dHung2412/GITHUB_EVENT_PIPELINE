@@ -1,7 +1,7 @@
 {{
   config(
-    -- materialized='table',
-    -- file_format='iceberg',
+    materialized='table',
+    file_format='iceberg',
     partition_by=['activity_date']
   )
 }}

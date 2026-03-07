@@ -4,10 +4,10 @@
 
 {{
   config(
-    -- materialized='incremental',
-    -- unique_key='event_id',
-    -- file_format='iceberg',
-    -- incremental_strategy='merge',
+    materialized='incremental',
+    unique_key='event_id',
+    file_format='iceberg',
+    incremental_strategy='merge',
     partition_by=['event_date'],
     merge_update_columns=['event_type', 'actor_login', 'repo_name']
   )
@@ -41,12 +41,12 @@ WITH source_data AS (
         push_distinct_size AS push_distinct_count,
         push_head_sha,
         
-        pr_id,
-        pr_number,
-        TRIM(pr_title) AS pr_title,
-        pr_state,
-        pr_merged,
-        pr_merged_at,
+        pull_request_id AS pr_id,
+        pull_request_number AS pr_number,
+        TRIM(pull_request_title) AS pr_title,
+        pull_request_state AS pr_state,
+        pull_request_merge AS pr_merged,
+        pull_request_merge_at AS pr_merged_at,
         
         issue_number,
         TRIM(issue_title) AS issue_title,
