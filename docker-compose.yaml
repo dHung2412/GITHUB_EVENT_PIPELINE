@@ -1,55 +1,54 @@
 x-airflow-common: &airflow-common
   build:
     context: .
-    dockerfile: ./airflow/Dockerfile
+    dockerfile: ./src/airflow/Dockerfile
   env_file:
-    - ${ENV_FILE_PATH:-.env}
+    - ./.env
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
-    AIRFLOW__CORE__FERNET_KEY: ''
-    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
-    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-    
+    AIRFLOW__CORE__FERNET_KEY: ""
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+
     # dbt Configuration
     DBT_PROFILES_DIR: /opt/dbt_profiles
     DBT_PROJECT_DIR: /opt/dbt_project
     DBT_TARGET: dev
     DBT_LOG_PATH: /tmp/dbt_logs
     DBT_TARGET_PATH: /tmp/dbt_target
-    
+
     # Iceberg Configuration
     ICEBERG_CATALOG: ${ICEBERG_CATALOG}
     BRONZE_NAMESPACE: ${BRONZE_NAMESPACE}
     SILVER_NAMESPACE: ${SILVER_NAMESPACE}
     GOLD_NAMESPACE: ${GOLD_NAMESPACE}
     SILVER_TABLE: ${SILVER_TABLE}
-    
+
     # Spark Connection
     SPARK_HOST: ${SPARK_HOST}
     SPARK_THRIFT_PORT: ${SPARK_THRIFT_PORT}
     SPARK_USER: ${SPARK_USER}
   volumes:
-    - ./dags:/opt/airflow/dags
-    - ./airflow/logs:/opt/airflow/logs
-    - ./airflow/plugins:/opt/airflow/plugins
-    - ./metric_collector/app/schema:/opt/airflow/schemas
-    - ./dbt_project:/opt/dbt_project
-    - ./dbt_profiles:/opt/dbt_profiles
+    - ./src/dags:/opt/airflow/dags
+    - ./src/airflow/logs:/opt/airflow/logs
+    - ./src/airflow/plugins:/opt/airflow/plugins
+    - ./src/metric_collector/app/schema:/opt/airflow/schemas
+    - ./src/dbt_project:/opt/dbt_project
+    - ./src/dbt_profiles:/opt/dbt_profiles
   user: "${AIRFLOW_UID:-50000}:0"
-  depends_on:
-    &airflow-common-depends-on
+  depends_on: &airflow-common-depends-on
     postgres:
       condition: service_healthy
   networks:
-      - data_stack_net
+    - data_stack_net
 
 services:
   #____________________POSTGRES____________________
   postgres:
     image: postgres:16
-    container_name: postgres
+    container_name: postgres_de
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -70,7 +69,7 @@ services:
   #____________________AIRFLOW____________________
   airflow-init:
     <<: *airflow-common
-    container_name: airflow-init
+    container_name: airflow-init_de
     entrypoint: /bin/bash
     command:
       - -c
@@ -80,10 +79,10 @@ services:
         exec /entrypoint airflow version
     environment:
       <<: *airflow-common-env
-      _AIRFLOW_DB_MIGRATE: 'true'
-      _AIRFLOW_WWW_USER_CREATE: 'true'
-      _AIRFLOW_WWW_USER_USERNAME: 'admin'
-      _AIRFLOW_WWW_USER_PASSWORD: 'admin'
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: "admin"
+      _AIRFLOW_WWW_USER_PASSWORD: "admin"
     user: "0:0"
 
   airflow-webserver:
@@ -98,10 +97,14 @@ services:
 
   airflow-scheduler:
     <<: *airflow-common
-    container_name: airflow-scheduler
+    container_name: airflow-scheduler_de
     command: scheduler
     healthcheck:
-      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname $$(hostname)"]
+      test:
+        [
+          "CMD-SHELL",
+          "airflow jobs check --job-type SchedulerJob --hostname $$(hostname)",
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -117,10 +120,14 @@ services:
 
   airflow-triggerer:
     <<: *airflow-common
-    container_name: airflow-triggerer
+    container_name: airflow-triggerer_de
     command: triggerer
     healthcheck:
-      test: ["CMD-SHELL", "airflow jobs check --job-type TriggererJob --hostname $$(hostname)"]
+      test:
+        [
+          "CMD-SHELL",
+          "airflow jobs check --job-type TriggererJob --hostname $$(hostname)",
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -130,14 +137,14 @@ services:
       postgres:
         condition: service_healthy
       airflow-init:
-        condition: service_completed_successfully 
+        condition: service_completed_successfully
     networks:
       - data_stack_net
 
   #____________________KAFKA____________________
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.3
-    container_name: zookeeper
+    container_name: zookeeper_de_1
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -149,7 +156,7 @@ services:
 
   kafka:
     image: confluentinc/cp-kafka:7.5.3
-    container_name: kafka
+    container_name: kafka_de_1
     depends_on:
       - zookeeper
     ports:
@@ -159,23 +166,23 @@ services:
       - kafka-data:/var/lib/kafka/data
     environment:
       KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
-      KAFKA_LOG_RETENTION_HOURS: 168        # 7 ngày
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 168 # 7 ngày
       KAFKA_LOG_RETENTION_BYTES: 1073741824 # 1GB per partition
-      KAFKA_LOG_SEGMENT_BYTES: 1073741824   # 1GB per segment
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824 # 1GB per segment
     networks:
       - data_stack_net
 
   #____________________ICEBERG____________________
   spark-iceberg:
     image: tabulario/spark-iceberg
-    container_name: spark-iceberg
+    container_name: spark-iceberg_de
     entrypoint: ["/bin/bash"]
     command:
       - -c
@@ -200,16 +207,16 @@ services:
           $$SPARK_OPTS \
           --conf spark.driver.memory=1g \
           --conf spark.executor.memory=1g
-        
+
         # Wait for Thrift Server to fully start
         sleep 10
-        
+
         # Initialize infrastructure schemas
         spark-sql --master local[*] $$SPARK_OPTS -e "CREATE NAMESPACE IF NOT EXISTS demo.default;"
         spark-sql --master local[*] $$SPARK_OPTS -e "CREATE NAMESPACE IF NOT EXISTS demo.bronze;"
         spark-sql --master local[*] $$SPARK_OPTS -e "CREATE NAMESPACE IF NOT EXISTS demo.silver;"
         spark-sql --master local[*] $$SPARK_OPTS -e "CREATE NAMESPACE IF NOT EXISTS demo.gold;"
-        
+
         # Start Jupyter in foreground to keep container alive
         ./entrypoint.sh notebook
     networks:
@@ -219,8 +226,7 @@ services:
       - minio
     volumes:
       - ./warehouse:/home/iceberg/warehouse
-      - ./notebooks:/home/iceberg/notebooks/notebooks
-      - ./dags/spark_jobs:/home/iceberg/spark_jobs
+      - ./src/dags/spark_jobs:/home/iceberg/spark_jobs
     environment:
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
       - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
@@ -228,13 +234,13 @@ services:
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
     ports:
-      - 8888:8888     # Jupyter
-      - 8081:8080     # Spark UI
-      - 10000:10000   # Spark Thrift Server
+      - 8888:8888 # Jupyter
+      - 8081:8080 # Spark UI
+      - 10000:10000 # Spark Thrift Server
 
   rest:
     image: apache/iceberg-rest-fixture
-    container_name: iceberg-rest
+    container_name: iceberg-rest_de
     networks:
       - data_stack_net
     ports:
@@ -250,7 +256,7 @@ services:
   #____________________MINIO____________________
   minio:
     image: minio/minio
-    container_name: minio
+    container_name: minio_de
     environment:
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
@@ -270,7 +276,7 @@ services:
     depends_on:
       - minio
     image: minio/mc
-    container_name: mc
+    container_name: mc_de
     networks:
       - data_stack_net
     environment:
@@ -285,6 +291,38 @@ services:
       tail -f /dev/null
       "
 
+  #____________________MONITORING____________________
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus_de
+    volumes:
+      - ./src/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    networks:
+      - data_stack_net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana_de
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - data_stack_net
+    depends_on:
+      - prometheus
 #____________________VOLUMES & NETWORKS____________________
 volumes:
   postgres-db-volume:
@@ -292,6 +330,8 @@ volumes:
   kafka-data:
   zookeeper-data:
   zookeeper-logs:
+  prometheus-data:
+  grafana-data:
 
 networks:
   data_stack_net:

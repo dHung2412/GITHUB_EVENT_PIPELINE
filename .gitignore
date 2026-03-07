@@ -12,15 +12,18 @@ warehouse
 note.txt
 tmp
 test.py
-run
+# run
 .agent
 docs
 docs_for_my_prj
-__init__.py
 dbt_project/dbt_packages/dbt_utils
 .md
 .dbtignore
 dbt_profiles
 jars
 dbt_packages
-test
+__init__.py
+cv.tex
+docs_for_my_prj.txt
+run
+test.json
