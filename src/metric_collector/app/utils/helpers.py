@@ -29,17 +29,41 @@ def serialize_batch_avro(batch: list[dict]) -> bytes:
     
     processed_data = []
     for item in batch:
-        record = item.copy() # Tách biệt dữ liệu gốc
+        # Tách biệt dữ liệu gốc, chỉ lấy các field schema hỗ trợ
+        record = {
+            "id": str(item.get("id", "")),
+            "type": str(item.get("type", "UnknownEvent")),
+            "public": bool(item.get("public", True)),
+            "created_at": str(item.get("created_at", ""))
+        }
 
-        payload = record.get("payload")
+        # 1. Handle Actor (Bắt buộc theo schema)
+        actor = item.get("actor", {})
+        if not actor: actor = {}
+        record["actor"] = {
+            "id": int(actor.get("id", 0)),
+            "login": str(actor.get("login", "")),
+            "gravatar_id": str(actor.get("gravatar_id", "")),
+            "url": str(actor.get("url", "")),
+            "avatar_url": str(actor.get("avatar_url", ""))
+        }
 
+        # 2. Handle Repo (Bắt buộc theo schema)
+        repo = item.get("repo", {})
+        if not repo: repo = {}
+        record["repo"] = {
+            "id": int(repo.get("id", 0)),
+            "name": str(repo.get("name", "")),
+            "url": str(repo.get("url", ""))
+        }
+
+        # 3. Handle Payload (Chuyển dict sang JSON string)
+        payload = item.get("payload")
         if payload is not None: 
-            if not isinstance(payload, str):
-                try: 
-                    record["payload"] = json.dumps(payload, ensure_ascii=False)
-                except Exception as e:
-                    logging.warning(f"<----- [HELPERS] Lỗi parsed payload sang JSON: {e}")
-        
+            if isinstance(payload, (dict, list)):
+                record["payload"] = json.dumps(payload, ensure_ascii=False)
+            else:
+                record["payload"] = str(payload)
         else:
             record["payload"] = None
         
@@ -47,7 +71,8 @@ def serialize_batch_avro(batch: list[dict]) -> bytes:
 
     try:
         with io.BytesIO() as fo:
-            fastavro.writer(fo, PARSED_SCHEMA, batch)
+            # Sửa lỗi: dùng processed_data thay vì batch gốc
+            fastavro.writer(fo, PARSED_SCHEMA, processed_data)
             return fo.getvalue()
             
     except Exception as e:
