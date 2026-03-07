@@ -13,41 +13,55 @@ Hệ thống được thiết kế theo mô hình 3 tầng (3-Tier Architecture)
 config:
   layout: dagre
 ---
-graph TD
-    subgraph "1. TẦNG TIẾP NHẬN (Acceptance Layer)"
-        A1["Simulator (HTTP Single)"] -- "1 Request = 1 Record" --> B1["/collect-single"]
-        A2["Simulator (HTTP Batch)"] -- "1 Request = N Records" --> B2["/collect-batch"]
-        B1 --> C
-        B2 -- "Gom lần 1: Giảm HTTP Overhead" --> C
-    end
+flowchart TB
+ subgraph subGraph0["1. TẦNG TIẾP NHẬN (Acceptance Layer)"]
+        B1["/collect-single"]
+        A1["Simulator (HTTP Single)"]
+        B2["/collect-batch"]
+        A2["Simulator (HTTP Batch)"]
+        C{"enqueue_item"}
+  end
+ subgraph subGraph1["2. TẦNG XỬ LÝ (Processing Layer)"]
+        D["Tạo event_id (UUID)"]
+        E["Bọc record: ID + Metric"]
+        F["Check Queue Capacity"]
+        G["Đẩy vào asyncio.Queue"]
+        H["Spill-to-Disk (JSONL)"]
+  end
+ subgraph subGraph2["3. TẦNG ĐẨY DỮ LIỆU (Outbound Layer)"]
+        I["Kafka Worker (Gom lần 2)"]
+        J["Serialize Avro (helpers.py)"]
+        K["Kafka (High Throughput)"]
+        M{"Retry Exhausted?"}
+        N["Fallback: S3/MinIO (.avro)"]
+        O["Local Disk (.avro)"]
+        P["Script Replay JSONL"]
+        Q["Script Replay Avro"]
+  end
+    A1 -- "1 Request = 1 Record" --> B1
+    A2 -- "1 Request = N Records" --> B2
+    B1 --> C
+    B2 -- Gom lần 1: Giảm HTTP Overhead --> C
+    C --> D
+    D --> E
+    E --> F
+    F -- RAM trống --> G
+    F -- RAM đầy (Do Kafka chết lâu) --> H
+    G -.-> I
+    I --> J
+    J -- "1. Gửi thành công" --> K
+    J -- "2. Lỗi / Kafka Chết" --> M
+    M -- CÓ --> N
+    N -- S3 Chết luôn --> O
+    H -.-> P
+    N -.-> Q
 
-    subgraph "2. TẦNG XỬ LÝ (Processing Layer)"
-        C{enqueue_item}
-        C --> D["Tạo event_id (UUID)"]
-        D --> E["Bọc record: ID + Metric"]
-        E --> F["Check Queue Capacity"]
-        F -- "RAM trống" --> G["Đẩy vào asyncio.Queue"]
-        F -- "RAM đầy (Do Kafka chết lâu)" --> H["Spill-to-Disk (JSONL)"]
-    end
-
-    subgraph "3. TẦNG ĐẨY DỮ LIỆU (Outbound Layer)"
-        G -.-> I["Kafka Worker (Gom lần 2)"]
-        I --> J["Serialize Avro (helpers.py)"]
-        J -- "1. Gửi thành công" --> K["Kafka (High Throughput)"]
-
-        J -- "2. Lỗi / Kafka Chết" --> M{Retry Exhausted?}
-        M -- "CÓ" --> N["Fallback: S3/MinIO (.avro)"]
-        N -- "S3 Chết luôn" --> O["Local Disk (.avro)"]
-
-        H -.-> P["Script Replay JSONL"]
-        N -.-> Q["Script Replay Avro"]
-    end
-    style B2 fill:#fdf,stroke:#f0f,stroke-width:2px
-    style I fill:#dfd,stroke:#0a0,stroke-width:2px
-    style J fill:#f9f,stroke:#333
-    style C fill:#bbf,stroke:#333,stroke-width:2px
-    style K fill:#fff,stroke:#0f0,stroke-width:3px
-    style M fill:#fee,stroke:#f00
+    style B2 fill:#FFD600,stroke:#000000,stroke-width:2px,color:#000000
+    style C fill:#bbf,stroke:#333,stroke-width:2px,color:#FFFFFF
+    style I fill:#00C853,stroke:#0a0,stroke-width:2px,color:#FFFFFF
+    style J fill:#f9f,stroke:#333,color:#FFFFFF
+    style K fill:#00C853,stroke:#0f0,stroke-width:3px,color:#FFFFFF
+    style M fill:#D50000,stroke:#f00,color:#FFFFFF
 ```
 
 ### 1. Tầng Tiếp Nhận (Acceptance Layer)
