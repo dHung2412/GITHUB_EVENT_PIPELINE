@@ -54,7 +54,8 @@ graph TD
 
 Hỗ trợ cả hai phương thức nạp dữ liệu:
 
-- **`/collect-single`**: Dành cho luồng "nhỏ giọt", ưu tiên tính Real-time - **`/collect-batch`**: Dành cho luồng "nạp nén", tối ưu hóa hiệu suất bằng cách giảm thiểu HTTP Overhead (Headers, Handshake). Đây là lựa chọn tối ưu cho các trình giả lập hoặc hệ thống chuyển tiếp log (Log Forwarders) với tốc độ lên tới hàng chục nghìn events/giây.
+- **`/collect-single`**: Dành cho luồng "nhỏ giọt", ưu tiên tính Real-time.
+- **`/collect-batch`**: Dành cho luồng "nạp nén", tối ưu hóa hiệu suất bằng cách giảm thiểu HTTP Overhead (Headers, Handshake). Đây là lựa chọn tối ưu cho các trình giả lập hoặc hệ thống chuyển tiếp log (Log Forwarders) với tốc độ lên tới hàng chục nghìn events/giây.
 
 ### 2. Tầng Xử Lý (Processing Layer)
 
