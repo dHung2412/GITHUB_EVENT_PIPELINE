@@ -13,16 +13,13 @@ python-snappy==0.7.3
 fastapi==0.121.2
 uvicorn==0.38.0
 httpx==0.28.1
-
-# Utils
-dotenv==0.9.9
+prometheus-client 
 
 # AWS/S3
 boto3==1.41.2
 
 # dbt
 click<8.1.8,>=8.0.0
-
 dbt-postgres==1.9.1
 dbt-spark[PyHive]
 
@@ -30,3 +27,7 @@ dbt-spark[PyHive]
 grpcio==1.76.0
 grpcio-status==1.76.0
 opentelemetry-proto==1.38.0
+
+# Utils
+dotenv==0.9.9
+pytest
