@@ -45,21 +45,32 @@ class KafkaProducerService:
     # ===
 
     async def _collect_batch(self) -> List[dict]:
-        batch = []
+        batch_items = []
 
         try:
+            # Lấy item đầu tiên (đợi tối đa 1 giây)
             item = await asyncio.wait_for(shared_queue.metric_queue.get(), timeout=1.0)
             batch_items.append(item)
-        except (asyncio.TimeoutError, Exception): return []
+        except asyncio.TimeoutError:
+            return []
+        except Exception as e:
+            logging.error(f"-----> [WORKER] Lỗi lấy dữ liệu từ queue: {e}")
+            return []
         
+        # Gom thêm các item khác đang chờ sẵn trong queue (không đợi)
         deadline = time.time() + settings.BATCH_MAX_TIME_S
-        while len(batch) < settings.BATCH_MAX_SIZE and time.time() < deadline:
+        while len(batch_items) < settings.BATCH_MAX_SIZE and time.time() < deadline:
             try: 
                 item = shared_queue.metric_queue.get_nowait()
-                batch.append(item)
+                batch_items.append(item)
             except asyncio.QueueEmpty:
-                await asyncio.sleep(0.01)
-        return batch
+                break
+            except Exception:
+                break
+        
+        if batch_items:
+            logging.info(f"-----> [WORKER] Đã gom batch gồm {len(batch_items)} records")
+        return batch_items
 
     async def _handle_batch(self, batch_items: List[dict]):
         batch_id = str(uuid.uuid4())[:8]
@@ -88,11 +99,11 @@ class KafkaProducerService:
             
             except KafkaError as e:
                 attempt+=1
-                logging.error(f"-----> [KAFKA] Thử lại {attempt}/{settings.KAFKA_RETRY_MAX} cho batch '{b_id}'")
+                logging.error(f"-----> [KAFKA] Lỗi gửi batch '{b_id}' (Lần {attempt}/{settings.KAFKA_RETRY_MAX}): {e}")
                 await asyncio.sleep(settings.KAFKA_RETRY_BACKOFF_BASE_S * attempt)
             except Exception as e:
-                logging.exception(f"-----> Lỗi với Batch '{batch_id}' : {e}.")
-                return None
+                logging.error(f"-----> [KAFKA] Lỗi không xác định với Batch '{b_id}': {e}", exc_info=True)
+                return False
         return False
     
     async def _fallback(self, b_data: bytes, b_id: str):

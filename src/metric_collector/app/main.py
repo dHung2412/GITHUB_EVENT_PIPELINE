@@ -12,8 +12,12 @@ from .utils.settings import settings
 from .kafka_producer import run_kafka_producer_worker
 from .shared_queue import shared_queue
 
-try: from . import metrics; METRICS_ENABLED = True
-except ImportError: METRICS_ENABLED = False
+try:
+    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    from . import metrics
+    METRICS_ENABLED = True
+except ImportError:
+    METRICS_ENABLED = False
 
 # === LIFESPAN
 @asynccontextmanager
